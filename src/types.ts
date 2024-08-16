@@ -1,5 +1,7 @@
 import type { FilterPattern } from '@rollup/pluginutils'
 
+export type ConsoleType = 'assert' | 'debug' | 'dir' | 'error' | 'info' | 'log' | 'table' | 'warn'
+
 export interface Options {
   /**
    * Only keep uncommitted consoles in the changed files.
@@ -11,7 +13,20 @@ export interface Options {
    * Remove console type of these module.
    * @default ['log']
    */
-  type?: Array<'assert' | 'debug' | 'dir' | 'error' | 'info' | 'log' | 'table' | 'warn'>
+  type?: Array<ConsoleType>
+
+  /**
+   * The object provides access to the debugging console.
+   * The array is empty or set to "*", indicating that the reference object is not determined.
+   * @default ['console']
+   */
+  reference?: Array<string> | '*'
+
+  /**
+   * Rules to include transforming target.
+   * @default [/\.[jt]sx?$/, /\.astro$/, /\.vue$/, /\.vue\?vue/, /\.svelte$/]
+   */
+  include?: FilterPattern
 
   /**
    * Rules to exclude transforming target.
