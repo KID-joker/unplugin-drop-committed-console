@@ -1,11 +1,12 @@
 // reference https://github.com/gitkraken/vscode-gitlens
 
 import * as process from 'node:process'
-import * as path from 'node:path'
+import path from 'node:path'
 import { exec, execFile, spawn } from 'node:child_process'
 import type { ExecFileException } from 'node:child_process'
 import type { Buffer } from 'node:buffer'
 import which from 'which'
+import { getLines } from '../utils'
 
 export enum Status {
   INDEX_MODIFIED,
@@ -31,23 +32,13 @@ export enum Status {
   BOTH_MODIFIED,
 }
 
-interface GitDiffHunkLine {
-  current: string | undefined
-  previous: string | undefined
-  state: 'added' | 'changed' | 'removed' | 'unchanged'
+export interface GitBlameLine {
+  readonly author?: string
+  readonly commit: string
+  readonly line: number
 }
-interface GitDiffHunk {
-  readonly contents: string
-  readonly current: {
-    readonly count: number
-    readonly position: { readonly start: number, readonly end: number }
-  }
-  readonly previous: {
-    readonly count: number
-    readonly position: { readonly start: number, readonly end: number }
-  }
-  readonly lines: Map<number, GitDiffHunkLine>
-}
+
+export const uncommitted = '0000000000000000000000000000000000000000'
 
 function findSpecificGit(path: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -179,127 +170,30 @@ function parseStatus(raw: { x: string, y: string }) {
   return undefined
 }
 
-function parseHunkHeaderPart(headerPart: string) {
-  const [startS, countS] = headerPart.split(',')
-  const start = Number(startS)
-  const count = Number(countS) || 1
-  return { count, position: { start, end: start + count - 1 } }
-}
-
-function parseDiff(data: string): GitDiffHunk[] {
+const blameRegex = /[\d-]+ [\d:]+ [+\-\d]+\s+(\d+)\)/
+function parseBlame(data: string): Map<number, GitBlameLine> {
   if (!data)
-    return []
+    return new Map()
 
-  const hunks: GitDiffHunk[] = []
+  const blames = new Map<number, GitBlameLine>()
 
-  const lines = data.split('\n')
-
-  // Skip header
-  let i = -1
-  while (++i < lines.length) {
-    if (lines[i].startsWith('@@')) {
-      break
+  for (const lineData of getLines(data)) {
+    const match = lineData.raw.match(blameRegex)
+    if (match) {
+      const commit_author = lineData.raw.slice(0, match.index)
+      const index = commit_author.indexOf(' (')
+      const commit = commit_author.slice(0, index)
+      const author = commit_author.slice(index + 2)
+      const lineStr = match[1]
+      const line = Number.parseInt(lineStr, 10)
+      blames.set(line, {
+        author: author.trim(),
+        commit,
+        line,
+      })
     }
   }
-
-  // Parse hunks
-  let line
-  while (i < lines.length) {
-    line = lines[i]
-    if (!line.startsWith('@@')) {
-      i++
-      continue
-    }
-
-    const header = line.split('@@')[1].trim()
-    const [previousHeaderPart, currentHeaderPart] = header.split(' ')
-
-    const current = parseHunkHeaderPart(currentHeaderPart.slice(1))
-    const previous = parseHunkHeaderPart(previousHeaderPart.slice(1))
-
-    const hunkLines = new Map<number, GitDiffHunkLine>()
-    let fileLineNumber = current.position.start
-
-    line = lines[++i]
-    const contentStartLine = i
-
-    // Parse hunks lines
-    while (i < lines.length && !line.startsWith('@@')) {
-      switch (line[0]) {
-        // deleted
-        case '-': {
-          let deletedLineNumber = fileLineNumber
-          while (line?.startsWith('-')) {
-            hunkLines.set(deletedLineNumber++, {
-              current: undefined,
-              previous: line.slice(1),
-              state: 'removed',
-            })
-            line = lines[++i]
-          }
-
-          if (line?.startsWith('+')) {
-            let addedLineNumber = fileLineNumber
-            while (line?.startsWith('+')) {
-              const hunkLine = hunkLines.get(addedLineNumber)
-              if (hunkLine != null) {
-                hunkLine.current = line.slice(1)
-                hunkLine.state = 'changed'
-              } else {
-                hunkLines.set(addedLineNumber, {
-                  current: line.slice(1),
-                  previous: undefined,
-                  state: 'added',
-                })
-              }
-              addedLineNumber++
-              line = lines[++i]
-            }
-            fileLineNumber = addedLineNumber
-          } else {
-            fileLineNumber = deletedLineNumber
-          }
-          break
-        }
-        // added
-        case '+':
-          hunkLines.set(fileLineNumber++, {
-            current: line.slice(1),
-            previous: undefined,
-            state: 'added',
-          })
-
-          line = lines[++i]
-          break
-
-          // unchanged (context)
-        case ' ':
-          hunkLines.set(fileLineNumber++, {
-            current: line.slice(1),
-            previous: line.slice(1),
-            state: 'unchanged',
-          })
-
-          line = lines[++i]
-          break
-
-        default:
-          line = lines[++i]
-          break
-      }
-    }
-
-    const hunk: GitDiffHunk = {
-      contents: `${lines.slice(contentStartLine, i).join('\n')}\n`,
-      current,
-      previous,
-      lines: hunkLines,
-    }
-
-    hunks.push(hunk)
-  }
-
-  return hunks
+  return blames
 }
 
 export function createGit() {
@@ -308,21 +202,35 @@ export function createGit() {
       .then((text: string) => text.trim() === 'true')
   }
 
+  function checkIsIgnore(path: string): Promise<boolean> {
+    return runGit(['check-ignore', path]).then((text: string) => !!text.trim()).catch(() => false)
+  }
+
+  function getCurrentUser(): Promise<string> {
+    return runGit(['config', '--get', 'user.name']).then((text: string) => text.trim())
+  }
+
   async function getStatus(path: string): Promise<Status | undefined> {
     const args = ['status', '-z', '-uall', path]
     const data = await runGit(args).then((text: string) => ({ x: text.charAt(0), y: text.charAt(1) }))
     return parseStatus(data)
   }
 
-  async function getDiff(path: string) {
-    const args = ['diff', '--no-ext-diff', '--minimal', '-U0', '--diff-filter=M', '--', path]
+  async function getBlame(path: string, startLine?: number, endLine?: number): Promise<Map<number, GitBlameLine>> {
+    const args = ['blame', '--root', '-l']
+    if (startLine != null && endLine != null) {
+      args.push(`-L ${startLine},${endLine}`)
+    }
+    args.push('--', path)
     const data = await runGit(args)
-    return parseDiff(data)
+    return parseBlame(data)
   }
 
   return {
     checkIsRepo,
+    checkIsIgnore,
+    getCurrentUser,
     getStatus,
-    getDiff,
+    getBlame,
   }
 }

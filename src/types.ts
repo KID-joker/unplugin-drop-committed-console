@@ -4,10 +4,11 @@ export type ConsoleType = 'assert' | 'debug' | 'dir' | 'error' | 'info' | 'log' 
 
 export interface Options {
   /**
-   * Only keep uncommitted consoles in the changed files.
-   * If false, keep all consoles.
+   * The scope of removing uncommitted consoles
+   * options: ['strict', 'file', 'user']
+   * @default 'user'
    */
-  strict?: boolean
+  scope?: string
 
   /**
    * Remove console type of these module.
@@ -24,7 +25,7 @@ export interface Options {
 
   /**
    * Rules to include transforming target.
-   * @default [/\.[jt]sx?$/, /\.astro$/, /\.vue$/, /\.vue\?vue/, /\.svelte$/]
+   * @default [/\.[jt]sx?$/, /\.vue$/, /\.vue\?vue/]
    */
   include?: FilterPattern
 
