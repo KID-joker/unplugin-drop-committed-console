@@ -51,9 +51,6 @@ importers:
       eslint:
         specifier: ^9.7.0
         version: 9.8.0
-      esno:
-        specifier: ^4.7.0
-        version: 4.7.0
       tsup:
         specifier: ^8.2.0
         version: 8.2.4(@swc/core@1.7.23)(jiti@1.21.6)(postcss@8.4.47)(tsx@4.16.5)(typescript@5.5.4)(yaml@2.5.0)
@@ -1347,10 +1344,6 @@ packages:
   eslint@9.8.0:
     resolution: {integrity: sha512-K8qnZ/QJzT2dLKdZJVX6W4XOwBzutMYmt0lqUS+JdXgd+HTYFlonFgkJ8s44d/zMPPCnOOk0kMWCApCPhiOy9A==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    hasBin: true
-
-  esno@4.7.0:
-    resolution: {integrity: sha512-81owrjxIxOwqcABt20U09Wn8lpBo9K6ttqbGvQcB3VYNLJyaV1fvKkDtpZd3Rj5BX3WXiGiJCjUevKQGNICzJg==}
     hasBin: true
 
   espree@10.1.0:
@@ -3325,6 +3318,7 @@ snapshots:
       '@esbuild/win32-arm64': 0.21.5
       '@esbuild/win32-ia32': 0.21.5
       '@esbuild/win32-x64': 0.21.5
+    optional: true
 
   esbuild@0.23.0:
     optionalDependencies:
@@ -3632,10 +3626,6 @@ snapshots:
       text-table: 0.2.0
     transitivePeerDependencies:
       - supports-color
-
-  esno@4.7.0:
-    dependencies:
-      tsx: 4.16.5
 
   espree@10.1.0:
     dependencies:
@@ -4434,6 +4424,7 @@ snapshots:
       get-tsconfig: 4.7.6
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   type-check@0.4.0:
     dependencies:
