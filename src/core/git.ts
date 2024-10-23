@@ -6,7 +6,7 @@ import { exec, execFile, spawn } from 'node:child_process'
 import type { ExecFileException } from 'node:child_process'
 import type { Buffer } from 'node:buffer'
 import which from 'which'
-import { getLines } from '../utils'
+import { getLines } from './utils'
 
 export enum Status {
   INDEX_MODIFIED,
@@ -32,10 +32,11 @@ export enum Status {
   BOTH_MODIFIED,
 }
 
-export interface GitBlameLine {
-  readonly author?: string
-  readonly commit: string
-  readonly line: number
+export interface BlameEntry {
+  sha: string
+  line: number
+  author: string
+  authorEmail?: string
 }
 
 export const uncommitted = '0000000000000000000000000000000000000000'
@@ -170,30 +171,57 @@ function parseStatus(raw: { x: string, y: string }) {
   return undefined
 }
 
-const blameRegex = /[\d-]+ [\d:]+ [+\-\d]+\s+(\d+)\)/
-function parseBlame(data: string): Map<number, GitBlameLine> {
+function parseBlame(data: string): BlameEntry | undefined {
   if (!data)
-    return new Map()
+    return
 
-  const blames = new Map<number, GitBlameLine>()
+  let entry: BlameEntry | undefined
 
   for (const lineData of getLines(data)) {
-    const match = lineData.raw.match(blameRegex)
-    if (match) {
-      const commit_author = lineData.raw.slice(0, match.index)
-      const index = commit_author.indexOf(' (')
-      const commit = commit_author.slice(0, index)
-      const author = commit_author.slice(index + 2)
-      const lineStr = match[1]
-      const line = Number.parseInt(lineStr, 10)
-      blames.set(line, {
-        author: author.trim(),
-        commit,
-        line,
-      })
+    const lineParts = lineData.split(' ')
+    if (lineParts.length < 2)
+      continue
+
+    const [key] = lineParts
+
+    if (entry == null) {
+      entry = {
+        sha: key,
+      } as unknown as BlameEntry
+
+      continue
+    }
+
+    switch (key) {
+      case 'author':
+        if (entry.sha === uncommitted) {
+          entry.author = 'You'
+        } else {
+          entry.author = lineData.slice(key.length + 1).trim()
+        }
+        break
+
+      case 'author-mail': {
+        if (entry.sha === uncommitted) {
+          continue
+        }
+
+        entry.authorEmail = lineData.slice(key.length + 1).trim()
+        const start = entry.authorEmail.indexOf('<')
+        if (start >= 0) {
+          const end = entry.authorEmail.indexOf('>', start)
+          if (end > start) {
+            entry.authorEmail = entry.authorEmail.substring(start + 1, end)
+          } else {
+            entry.authorEmail = entry.authorEmail.substring(start + 1)
+          }
+        }
+
+        break
+      }
     }
   }
-  return blames
+  return entry
 }
 
 export function createGit() {
@@ -206,8 +234,8 @@ export function createGit() {
     return runGit(['check-ignore', path]).then((text: string) => !!text.trim()).catch(() => false)
   }
 
-  function getCurrentUser(): Promise<string> {
-    return runGit(['config', '--get', 'user.name']).then((text: string) => text.trim())
+  function getCurrentConfig(key: string): Promise<string> {
+    return runGit(['config', '--get', key]).then((text: string) => text.trim())
   }
 
   async function getStatus(path: string): Promise<Status | undefined> {
@@ -216,12 +244,8 @@ export function createGit() {
     return parseStatus(data)
   }
 
-  async function getBlame(path: string, startLine?: number, endLine?: number): Promise<Map<number, GitBlameLine>> {
-    const args = ['blame', '--root', '-l']
-    if (startLine != null && endLine != null) {
-      args.push(`-L ${startLine},${endLine}`)
-    }
-    args.push('--', path)
+  async function getBlame(path: string, lineNum: number): Promise<BlameEntry | undefined> {
+    const args = ['blame', '--root', '--incremental', `-L ${lineNum},${lineNum}`, '--', path]
     const data = await runGit(args)
     return parseBlame(data)
   }
@@ -229,7 +253,7 @@ export function createGit() {
   return {
     checkIsRepo,
     checkIsIgnore,
-    getCurrentUser,
+    getCurrentConfig,
     getStatus,
     getBlame,
   }

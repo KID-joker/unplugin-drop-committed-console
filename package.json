@@ -29,20 +29,10 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./esbuild": {
-      "types": "./dist/esbuild.d.ts",
-      "import": "./dist/esbuild.js",
-      "require": "./dist/esbuild.cjs"
-    },
     "./farm": {
       "types": "./dist/farm.d.ts",
       "import": "./dist/farm.js",
       "require": "./dist/farm.cjs"
-    },
-    "./rolldown": {
-      "types": "./dist/rolldown.d.ts",
-      "import": "./dist/rolldown.js",
-      "require": "./dist/rolldown.cjs"
     },
     "./rollup": {
       "types": "./dist/rollup.d.ts",
@@ -92,14 +82,12 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@antfu/install-pkg": "^0.3.4",
     "@babel/parser": "^7.25.6",
     "@babel/traverse": "^7.25.6",
+    "@jridgewell/trace-mapping": "^0.3.25",
     "@rollup/pluginutils": "^5.1.0",
-    "local-pkg": "^0.5.0",
     "magic-string": "^0.30.11",
     "unplugin": "^1.11.0",
-    "vue": "^3.5.9",
     "which": "^4.0.0"
   },
   "devDependencies": {

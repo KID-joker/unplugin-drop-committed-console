@@ -25,13 +25,13 @@ export interface Options {
 
   /**
    * Rules to include transforming target.
-   * @default [/\.[jt]sx?$/, /\.vue$/, /\.vue\?vue/]
+   * @default [/\.[jt]sx?$/, /\.vue$/, /\.vue\?vue/, /\.svelte$/]
    */
   include?: FilterPattern
 
   /**
    * Rules to exclude transforming target.
-   * @default [/node_modules/, /\.git/]
+   * @default [/[\\/]node_modules[\\/]/, /[\\/]\.git[\\/]/]
    */
   exclude?: FilterPattern
 }
